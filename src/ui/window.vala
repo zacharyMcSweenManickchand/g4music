@@ -41,8 +41,10 @@ namespace G4 {
             _leaflet.bind_property ("folded", revealer, "reveal-child", BindingFlags.SYNC_CREATE);
 
             setup_drop_target ();
+            setup_focus_controller ();
 
             var settings = app.settings;
+            settings.bind ("maximized", this, "maximized", SettingsBindFlags.DEFAULT);
             settings.bind ("width", this, "default-width", SettingsBindFlags.DEFAULT);
             settings.bind ("height", this, "default-height", SettingsBindFlags.DEFAULT);
             settings.bind ("blur-mode", this, "blur-mode", SettingsBindFlags.DEFAULT);
@@ -56,6 +58,26 @@ namespace G4 {
                 _bkgnd_blur = value;
                 if (_window_height > 0)
                     update_background ();
+            }
+        }
+
+        public bool focused_visible {
+            get {
+                return focus_visible;
+            }
+            set {
+                if (!value)
+                    focus_to_play_later ();
+            }
+        }
+
+        public Gtk.Widget focused_widget {
+            owned get {
+                return focus_widget;
+            }
+            set {
+                if (!(value is Gtk.Editable))
+                    focus_to_play_later (2000);
             }
         }
 
@@ -142,11 +164,19 @@ namespace G4 {
             }
         }
 
+        private void focus_to_play_later (int delay = 100) {
+            run_timeout_once (delay, () => {
+                if (!focus_visible && !(focus_widget is Gtk.Editable)) {
+                    _play_panel.focus_to_play ();
+                }
+            });
+        }
+
         private bool on_close_request () {
             var app = (Application) application;
             if (app.player.playing && app.settings.get_boolean ("play-background")) {
                 app.request_background ();
-                this.hide ();
+                this.visible = false;
                 return true;
             }
             return false;
@@ -223,6 +253,14 @@ namespace G4 {
             target.on_drop.connect (on_file_dropped);
 #endif
             this.content.add_controller (target);
+        }
+
+        private void setup_focus_controller () {
+            var controller = new Gtk.EventControllerFocus ();
+            controller.enter.connect (() => focused_visible = false);
+            this.content.add_controller (controller);
+            this.bind_property ("focus_visible", this, "focused_visible", BindingFlags.SYNC_CREATE);
+            this.bind_property ("focus_widget", this, "focused_widget", BindingFlags.SYNC_CREATE);
         }
 
         private void update_background () {
